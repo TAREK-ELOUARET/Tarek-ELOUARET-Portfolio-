@@ -1,0 +1,62 @@
+name: Lighthouse Audit
+
+on:
+  # Run right after the Pages deployment workflow finishes
+  workflow_run:
+    workflows: ["Deploy to GitHub Pages"]
+    types: [completed]
+
+  # Also run weekly (Monday 06:00 UTC)
+  schedule:
+    - cron: "0 6 * * 1"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "lighthouse"
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Only gate on success when triggered by workflow_run
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Wait a bit for Pages to propagate
+        run: sleep 60
+
+      - name: Audit production URL with Lighthouse CI
+        id: lh
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          runs: 3
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Add report links to job summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Lighthouse Reports" >> "$GITHUB_STEP_SUMMARY"
+          LINKS='${{ steps.lh.outputs.links }}'
+
+          if command -v jq >/dev/null 2>&1 && [ -n "$LINKS" ] && [ "$LINKS" != "null" ]; then
+            echo "$LINKS" | jq -r 'to_entries[] | "- [Report for \(.key)](\(.value))"' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Report links (raw):" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "$LINKS" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifacts are attached to this workflow run (look for the Lighthouse CI artifact)." >> "$GITHUB_STEP_SUMMARY"
