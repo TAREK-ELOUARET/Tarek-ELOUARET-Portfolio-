@@ -12,9 +12,6 @@ on:
 
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
   group: "lighthouse"
   cancel-in-progress: true
@@ -24,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # Only gate on success when triggered by workflow_run
+    # Only run when the deploy workflow succeeded (for workflow_run trigger)
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
@@ -35,8 +32,9 @@ jobs:
         id: lh
         uses: treosh/lighthouse-ci-action@v12
         with:
+          # Use a stable, explicit URL (avoids event-payload differences)
           urls: |
-            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+            https://tarek-elouaret.github.io/Tarek-ELOUARET-Portfolio-/
           runs: 3
           uploadArtifacts: true
           temporaryPublicStorage: true
@@ -47,7 +45,6 @@ jobs:
         run: |
           echo "## Lighthouse Reports" >> "$GITHUB_STEP_SUMMARY"
           LINKS='${{ steps.lh.outputs.links }}'
-
           if command -v jq >/dev/null 2>&1 && [ -n "$LINKS" ] && [ "$LINKS" != "null" ]; then
             echo "$LINKS" | jq -r 'to_entries[] | "- [Report for \(.key)](\(.value))"' >> "$GITHUB_STEP_SUMMARY"
           else
@@ -57,6 +54,5 @@ jobs:
             echo "$LINKS" >> "$GITHUB_STEP_SUMMARY"
             echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           fi
-
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Artifacts are attached to this workflow run (look for the Lighthouse CI artifact)." >> "$GITHUB_STEP_SUMMARY"
