@@ -12,6 +12,10 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+  statuses: write
+
 concurrency:
   group: "lighthouse"
   cancel-in-progress: true
@@ -25,14 +29,31 @@ jobs:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
+      # Checkout the exact commit that triggered the deploy (so LHCI can read git SHA)
+      - name: Checkout (deployed commit)
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # Checkout for schedule/manual runs
+      - name: Checkout
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Wait a bit for Pages to propagate
-        run: sleep 60
+        run: sleep 90
 
       - name: Audit production URL with Lighthouse CI
         id: lh
         uses: treosh/lighthouse-ci-action@v12
+        env:
+          # Fallback so LHCI always knows which commit it's reporting for
+          LHCI_BUILD_CONTEXT__CURRENT_HASH: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
         with:
-          # Use a stable, explicit URL (avoids event-payload differences)
           urls: |
             https://tarek-elouaret.github.io/Tarek-ELOUARET-Portfolio-/
           runs: 3
